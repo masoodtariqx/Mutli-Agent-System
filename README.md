@@ -6,13 +6,28 @@
 
 ## 🏗️ System Architecture
 
-### High-Level Overview
+### V0: Prediction Engine
 ```mermaid
 graph TD
-    User([User]) -->|Input event_id| Controller[Main Controller]
-    Controller --> Fetcher[Polymarket Fetcher]
-    Fetcher -->|Event Metadata| DB[(SQLite DB)]
-    
+    A[Polymarket API] -->|Fetch Event| B[PredictionService]
+    B -->|Research Query| C[Tavily Search API]
+    C -->|Web Content| B
+    B -->|Context + Prompt| D[AI Agents]
+    D -->|Independent Prediction| E[(SQLite DB)]
+```
+
+### V1: Debate Engine
+```mermaid
+graph TD
+    A[(SQLite DB)] -->|Fetch Saved Predictions| B[DebateService]
+    B -->|Status Update| M[Moderator Agent]
+    M -->|Strategic Direction| B
+    B -->|Challenge Opponent| C[Agent A]
+    B -->|Rebut Claim| D[Agent B]
+    B -->|Defend Timeline| E[Agent C]
+    C & D & E -->|Immutable Prediction| B
+    B -->|Final Transcript| F[Console/JSON]
+```
     subgraph "Agent Prediction Engine (V0)"
         AgentA[Agent A: ChatGPT - Precision]
         AgentB[Agent B: Grok - Early-Signal]
@@ -97,17 +112,27 @@ To see a list of active tech-related events and their IDs:
 python main.py discover
 ```
 
-### 4. Run a Battle
-Run a prediction battle by providing an Event ID:
+### 4. Run a Battle (V0)
+Run a prediction battle by providing an Event ID, Slug, or URL:
 ```bash
-python main.py predict <event_id>
+python main.py predict gpt-6-released-by
 ```
 
 ### 5. Start a Debate (V1)
-Once predictions are saved, agents can debate their findings:
+Once predictions are locked in the database, trigger the debate layer:
 ```bash
-python main.py debate <event_id>
+python main.py debate gpt-6-released-by --rounds 3
 ```
+
+---
+
+## 🛠️ Agents & Archetypes
+
+| Agent | Focus | Evidence Preference |
+| :--- | :--- | :--- |
+| **Agent A (ChatGPT)** | Precision | Official docs, primary sources |
+| **Agent B (Grok)** | Early Signals | Social sentiment, leaks, experts |
+| **Agent C (Gemini)** | Constraints | Historical precedents, feasibility |
 
 ---
 
