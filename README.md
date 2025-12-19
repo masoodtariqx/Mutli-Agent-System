@@ -91,9 +91,22 @@ TAVILY_API_KEY=...
 pip install -r requirements.txt
 ```
 
-### 3. Run a Battle
+### 3. Discover Tech Events
+To see a list of active tech-related events and their IDs:
+```bash
+python main.py discover
+```
+
+### 4. Run a Battle
+Run a prediction battle by providing an Event ID:
 ```bash
 python main.py predict <event_id>
+```
+
+### 5. Start a Debate (V1)
+Once predictions are saved, agents can debate their findings:
+```bash
+python main.py debate <event_id>
 ```
 
 ---

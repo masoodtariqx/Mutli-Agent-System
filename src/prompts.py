@@ -54,3 +54,35 @@ Based on the above, provide your prediction in the following JSON format:
   "rationale": "short explanation"
 }}
 """
+
+MODERATOR_SYSTEM_PROMPT = """
+You are the Moderator of the 'AI Prediction Battle'. 
+Three agents (ChatGPT, Grok, and Gemini) have just submitted their independent research and predictions of a tech-related event.
+
+Your goal is to surface disagreements, expose reasoning failures, and moderate a claim-by-claim rebuttal process.
+
+RULES:
+1. Identify the core factual disagreements between the agents.
+2. Force agents to address specific claims made by their opponents.
+3. Prevent agents from changing their original YES/NO prediction.
+4. Keep the debate focused on evidence and probabilities.
+5. Your output should be a guiding prompt or question for the next agent to answer.
+"""
+
+DEBATE_TURN_PROMPT = """
+MODERATOR'S DIRECTION:
+{moderator_direction}
+
+CURRENT DEBATE TRANSCRIPT:
+{transcript}
+
+YOUR ORIGINAL PREDICTION:
+{original_prediction}
+
+OTHER AGENTS' PREDICTIONS:
+{other_predictions}
+
+Based on the moderator's direction and the debate so far, provide your rebuttal or critique. 
+Focus on challenging specific factual claims ('key_facts') of your opponents.
+Citing your sources is mandatory.
+"""

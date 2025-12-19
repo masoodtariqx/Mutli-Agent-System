@@ -46,9 +46,23 @@ class ChatGPTAgent(BaseAgent):
         data = json.loads(response.choices[0].message.content)
         return PredictionOutput(**data)
 
-    def debate_turn(self, context: str) -> str:
-        # Placeholder for V1
-        return ""
+    def debate_turn(self, moderator_direction: str, transcript: str, original_prediction: str, other_predictions: str) -> str:
+        system_content = f"{SYSTEM_PROMPT_PREFIX}\n{CHATGPT_ARCHETYPE}"
+        user_content = DEBATE_TURN_PROMPT.format(
+            moderator_direction=moderator_direction,
+            transcript=transcript,
+            original_prediction=original_prediction,
+            other_predictions=other_predictions
+        )
+
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content}
+            ]
+        )
+        return response.choices[0].message.content
 
 class GrokAgent(BaseAgent):
     def __init__(self):
@@ -91,8 +105,23 @@ class GrokAgent(BaseAgent):
         data = json.loads(response.choices[0].message.content)
         return PredictionOutput(**data)
 
-    def debate_turn(self, context: str) -> str:
-        return ""
+    def debate_turn(self, moderator_direction: str, transcript: str, original_prediction: str, other_predictions: str) -> str:
+        system_content = f"{SYSTEM_PROMPT_PREFIX}\n{GROK_ARCHETYPE}"
+        user_content = DEBATE_TURN_PROMPT.format(
+            moderator_direction=moderator_direction,
+            transcript=transcript,
+            original_prediction=original_prediction,
+            other_predictions=other_predictions
+        )
+
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content}
+            ]
+        )
+        return response.choices[0].message.content
 
 class GeminiAgent(BaseAgent):
     def __init__(self):
@@ -136,5 +165,15 @@ class GeminiAgent(BaseAgent):
         data = json.loads(content)
         return PredictionOutput(**data)
 
-    def debate_turn(self, context: str) -> str:
-        return ""
+    def debate_turn(self, moderator_direction: str, transcript: str, original_prediction: str, other_predictions: str) -> str:
+        system_content = f"{SYSTEM_PROMPT_PREFIX}\n{GEMINI_ARCHETYPE}"
+        user_content = DEBATE_TURN_PROMPT.format(
+            moderator_direction=moderator_direction,
+            transcript=transcript,
+            original_prediction=original_prediction,
+            other_predictions=other_predictions
+        )
+
+        prompt = f"{system_content}\n\n{user_content}"
+        response = self.model.generate_content(prompt)
+        return response.text
