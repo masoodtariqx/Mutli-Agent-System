@@ -25,14 +25,3 @@ class EventMetadata(BaseModel):
     market_probability: Optional[float] = None
     liquidity: Optional[float] = None
     resolution_date: str
-
-class DebateTurn(BaseModel):
-    agent_name: str
-    content: str
-    challenge_target: Optional[str] = None # Name of the agent being challenged
-    challenged_claim: Optional[str] = None # The specific claim being rebutted
-
-class DebateSession(BaseModel):
-    event_id: str
-    transcript: List[DebateTurn]
-    summary: str

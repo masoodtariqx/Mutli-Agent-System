@@ -34,7 +34,3 @@ class BaseAgent(ABC):
     @abstractmethod
     def generate_prediction(self, event: EventMetadata) -> PredictionOutput:
         pass
-
-    @abstractmethod
-    def debate_turn(self, context: str) -> str:
-        pass

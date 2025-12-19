@@ -1,98 +1,85 @@
-# AI Prediction Battle (Tech Events)
+# 🎯 AI Prediction Battle (V0 Engine)
 
-A multi-agent system designed to research and predict outcomes of tech-related Polymarket events. The system uses specialized LLM archetypes—Precision, Signal, and Constraint—to simulate independent research and debate cycles.
+A high-fidelity multi-agent system designed to research and forecast outcomes for tech-related prediction markets on **Polymarket**. 
+
+The V0 Engine focuses on **Agent Isolation and Research Integrity**—ensuring that multiple AI archetypes can independently analyze the same event and produce auditable, defensible probability forecasts without data leakage.
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Technical Architecture
 
-### V0: Prediction Engine
-Predicts binary outcomes using independent web research (Tavily).
+### V0: Independent Research & Prediction Flow
+The system enforces a strict "No-Communication" policy during the research phase. Each agent is a standalone instance with its own memory and research strategy.
+
 ```mermaid
 graph TD
-    A[Polymarket API] -->|Metadata| B[PredictionService]
-    B -->|Query| C[Tavily Search API]
-    C -->|Content| B
-    B -->|Context| D[Agents: A, B, C]
-    D -->|JSON Output| E[(SQLite)]
+    A[Polymarket API] -->|Metadata| B[Service: Prediction Engine]
+    B -->|Query Generation| C[Tavily Advanced Search]
+    C -->|Web Context| B
+    B -->|Archetype Context| D[Agent A: Precision]
+    B -->|Archetype Context| E[Agent B: Early-Signal]
+    B -->|Archetype Context| F[Agent C: Constraints]
+    D & E & F -->|JSON Forecast| G[(SQLite Persistence)]
+    style G fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
-### V1: Debate Engine (Turn-based)
-Orchestrates a claim-by-claim rebuttal process via a Moderator Agent.
-```mermaid
-graph TD
-    A[(SQLite)] -->|Predictions| B[DebateService]
-    B -->|Context| M[Moderator]
-    M -->|Directions| B
-    B -->|Challenges| C[Agent A]
-    B -->|Challenges| D[Agent B]
-    B -->|Challenges| E[Agent C]
-    C & D & E -->|Rebuttals| B
-    B -->|Transcription| F[Terminal/MP3]
-```
+---
 
-## 🛠️ Agents & Archetypes
+## 🛠️ Specialized AI Archetypes
+We differentiate agents by **research incentives** and **risk postures**, not personality.
 
-| Archetype | Focus | Evidence Preference | Voice (TTS) |
+| Profile | Strategy | Data Preference | Risk Posture |
 | :--- | :--- | :--- | :--- |
-| **Agent A (ChatGPT)** | Precision | Official documentation, primary sources | Shimmer |
-| **Agent B (Grok)** | Early Signals | Social sentiment, leaks, experts on X | Onyx |
-| **Agent C (Gemini)** | Constraints | Historical precedents, technical feasibility | Fable |
-| **Moderator** | Logic | Consistency, factual contradictions | Nova |
+| **Agent A** | Precision-Oriented | Primary sources, official docs, press releases | Conservative |
+| **Agent B** | Early-Signal | Social sentiment, expert leaks, X (Twitter) signals | Aggressive |
+| **Agent C** | Constraint-Oriented | Historical precedents, technical feasibility, regulatory | Moderate |
 
 ---
 
-## 🚦 Quick Start
+## 🚦 Getting Started
 
-### 1. Requirements
-Ensure you have an `.env` file with the following:
-```env
-OPENAI_API_KEY=x...
-XAI_API_KEY=x...
-GEMINI_API_KEY=x...
-TAVILY_API_KEY=x...
+### 1. Environment Configuration
+Create a `.env` file in the root directory. The system will automatically skip agents whose keys are missing.
+
+```bash
+# Research Access
+TAVILY_API_KEY=tvly-xxxx
+
+# Agent LLM Access
+OPENAI_API_KEY=sk-xxxx
+XAI_API_KEY=xai-xxxx
+GEMINI_API_KEY=AIza-xxxx
 ```
 
-### 2. Setup
+### 2. Dependency Management
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Usage Commands
+### 3. Usage: Running a Battle
+Pass a manual **Polymarket Event ID** to trigger the engine.
 
-**Discover Trending Events**
-Find IDs or Slugs for active tech markets:
 ```bash
-python main.py discover
+python main.py predict [event_id]
 ```
 
-**Run Full AI Battle (V0 + V1)**
-This single command automates the entire flow:
-1. Fetches market data.
-2. Triggers independent AI research.
-3. Generates and stores predictions.
-4. Initiates the **Text Debate Layer** between agents.
-5. Displays the final debate transcript and reasoning.
-
+*Example (2028 Election Market):*
 ```bash
-python main.py run [event_id | slug | url]
-```
-
-*Example:*
-```bash
-python main.py run which-company-will-have-the-best-ai-model-for-coding-at-the-end-of-2025
+python main.py predict 31552
 ```
 
 ---
 
-## 📦 Core Modules
+## 📦 Core Component Manifest
 
-- **`PolymarketService`**: Interfaces with Gamma API to resolve slugs/urls and fetch resolution rules.
-- **`PredictionService`**: Orchestrates independent agent research (no cross-agent leakage).
-- **`DebateService`**: Implements turn-based logic where agents challenge specific factual claims.
-- **`VoiceService`**: Manages OpenAI `tts-1` generation for multi-voice debate output.
+*   **`PolymarketService`**: Interfaces with the Gamma API to resolve event rules and resolution dates.
+*   **`PredictionService`**: Orchestrator that manages the lifecycle of the "Battle."
+*   **`Isolated Agents`**: Subclasses of `BaseAgent` that execute archetypal-specific prompts.
+*   **`Persistence Layer`**: SQLite database for **Locked Predictions**—once an agent predicts, the data is immutable and stored for future auditing.
 
-## ⚖️ Legal & Positioning
-- Global Disclaimer: *“This content is for informational and educational purposes only.”*
-- The system generates **probabilistic forecasts**, NOT betting/financial advice.
-- No real-money wagering or betting interactions are supported.
+---
+
+## ⚖️ Legal Disclaimer
+- This tool is for **informational and research purposes only.**
+- It does not represent financial or betting advice.
+- No real-money wagering or automated betting functionality is included.
