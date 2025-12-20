@@ -1,17 +1,29 @@
+"""
+Prediction Service - Orchestrates predictions with proper agent tracking
+Returns both predictions list and agent_predictions dict for debate
+"""
+
 import os
-from typing import List
+from typing import List, Tuple, Dict
 from src.agents.specialized_agents import ChatGPTAgent, GrokAgent, GeminiAgent
 from src.services.polymarket_service import PolymarketService
 from src.database import Database
 from src.models import PredictionOutput
+from src.utils.console import (
+    console, print_header, print_event, print_agents_status,
+    print_prediction, print_predictions_table, print_error, print_section
+)
+
 
 class PredictionService:
+    """Orchestrates prediction battles with proper agent tracking."""
+    
     def __init__(self):
         self.db = Database()
         self.all_agents = [
             ChatGPTAgent(),
             GrokAgent(),
-            GeminiAgent()
+            GeminiAgent(),
         ]
 
     def _get_active_agents(self):
@@ -24,39 +36,79 @@ class PredictionService:
                 inactive.append(agent.name)
         return active, inactive
 
+    def _format_error(self, error: str) -> str:
+        """Clean up error messages."""
+        if "429" in str(error) or "quota" in str(error).lower():
+            return "Rate limit exceeded. Wait 1 minute."
+        if "401" in str(error) or "unauthorized" in str(error).lower() or "invalid" in str(error).lower():
+            return "Invalid API key."
+        if "404" in str(error) or "not found" in str(error).lower():
+            return "Model not found."
+        return str(error).split('\n')[0][:80]
+
     def run_battle(self, event_id: str):
+        """Returns (predictions_list, agent_predictions_dict) for debate."""
+        
         # 1. Fetch Event
         event = PolymarketService.get_event_details(event_id)
         if not event:
-            print(f"Failed to fetch event {event_id}")
-            return
+            print_error(f"Failed to fetch event: {event_id}")
+            return [], {}
 
-        print(f"\n--- Starting Prediction Battle: {event.title} ---")
+        # Show full event data captured from Polymarket
+        print_event(
+            event.title, 
+            event.event_id, 
+            event.description, 
+            event.resolution_rules, 
+            event.resolution_date
+        )
         self.db.save_event(event)
 
-        # 2. Filter Active Agents
+        # 2. Check Active Agents
         active_agents, inactive_names = self._get_active_agents()
-        if inactive_names:
-            print(f"⚠️  Note: Skipping agents due to missing API keys: {', '.join(inactive_names)}")
+        print_agents_status([a.name for a in active_agents], inactive_names)
         
         if not active_agents:
-            print("❌ No agents are configured with API keys. Please update your .env file.")
-            return
+            print_error("No agents configured! Add API keys to .env")
+            return [], {}
 
-        # 3. Check Research API
-        if not os.getenv("TAVILY_API_KEY"):
-            print("⚠️  Warning: TAVILY_API_KEY is missing. Agents will not be able to perform research.")
-
-        # 4. Run Agents independently
+        # 3. Run Predictions - Track with agent names
         predictions: List[PredictionOutput] = []
+        agent_predictions: List[Dict] = []  # For debate
+        
         for agent in active_agents:
-            print(f"\n🤖 Agent {agent.name} ({agent.model_name}) is researching...")
+            print_section(f"{agent.name} Researching")
+            
             try:
                 pred = agent.generate_prediction(event)
                 self.db.save_prediction(agent.name, pred)
                 predictions.append(pred)
-                print(f"✅ Agent {agent.name} predicts {pred.prediction} with {pred.probability*100:.1f}% probability")
+                
+                # Store for debate - with agent name
+                agent_predictions.append({
+                    "agent_name": agent.name,
+                    "prediction": pred.prediction.value,
+                    "probability": pred.probability,
+                    "rationale": pred.rationale,
+                    "key_facts": [{"claim": f.claim, "source": f.source} for f in pred.key_facts]
+                })
+                
+                # Beautiful prediction output
+                print_prediction(
+                    agent.name,
+                    pred.prediction.value,
+                    pred.probability,
+                    pred.rationale,
+                    [{"claim": f.claim, "source": f.source} for f in pred.key_facts]
+                )
+                    
             except Exception as e:
-                print(f"❌ Error for agent {agent.name}: {e}")
+                print_error(f"{agent.name} failed: {self._format_error(str(e))}")
 
-        return predictions
+        # Summary table
+        if agent_predictions:
+            print_section("Predictions Summary")
+            print_predictions_table(agent_predictions)
+        
+        return predictions, agent_predictions

@@ -1,85 +1,153 @@
-# 🎯 AI Prediction Battle (V0 Engine)
+# 🎯 AI Prediction Battle
 
-A high-fidelity multi-agent system designed to research and forecast outcomes for tech-related prediction markets on **Polymarket**. 
+A multi-agent AI system that researches, predicts, and debates real-world events from **Polymarket**.
 
-The V0 Engine focuses on **Agent Isolation and Research Integrity**—ensuring that multiple AI archetypes can independently analyze the same event and produce auditable, defensible probability forecasts without data leakage.
-
----
-
-## 🏗️ Technical Architecture
-
-### V0: Independent Research & Prediction Flow
-The system enforces a strict "No-Communication" policy during the research phase. Each agent is a standalone instance with its own memory and research strategy.
-
-```mermaid
-graph TD
-    A[Polymarket API] -->|Metadata| B[Service: Prediction Engine]
-    B -->|Query Generation| C[Tavily Advanced Search]
-    C -->|Web Context| B
-    B -->|Archetype Context| D[Agent A: Precision]
-    B -->|Archetype Context| E[Agent B: Early-Signal]
-    B -->|Archetype Context| F[Agent C: Constraints]
-    D & E & F -->|JSON Forecast| G[(SQLite Persistence)]
-    style G fill:#f9f,stroke:#333,stroke-width:2px
-```
+Three AI agents (ChatGPT, Grok, Gemini) independently analyze events, make locked predictions, and engage in structured debates.
 
 ---
 
-## 🛠️ Specialized AI Archetypes
-We differentiate agents by **research incentives** and **risk postures**, not personality.
+## ✨ Features
 
-| Profile | Strategy | Data Preference | Risk Posture |
-| :--- | :--- | :--- | :--- |
-| **Agent A** | Precision-Oriented | Primary sources, official docs, press releases | Conservative |
-| **Agent B** | Early-Signal | Social sentiment, expert leaks, X (Twitter) signals | Aggressive |
-| **Agent C** | Constraint-Oriented | Historical precedents, technical feasibility, regulatory | Moderate |
+| Version | Feature | Description |
+|:---:|:---|:---|
+| **V0** | Prediction Engine | Independent research & locked predictions |
+| **V1** | Text Debate | Natural conversation-style debate |
+| **V2** | Voice Debate | Live TTS with unique voices per agent |
 
 ---
 
-## 🚦 Getting Started
+## 🚀 Quick Start
 
-### 1. Environment Configuration
-Create a `.env` file in the root directory. The system will automatically skip agents whose keys are missing.
-
-```bash
-# Research Access
-TAVILY_API_KEY=tvly-xxxx
-
-# Agent LLM Access
-OPENAI_API_KEY=sk-xxxx
-XAI_API_KEY=xai-xxxx
-GEMINI_API_KEY=AIza-xxxx
-```
-
-### 2. Dependency Management
+### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Usage: Running a Battle
-Pass a manual **Polymarket Event ID** to trigger the engine.
+### 2. Configure API Keys
+Create a `.env` file:
+```env
+# Required (at least one)
+OPENAI_API_KEY=sk-your-key      # ChatGPT
+XAI_API_KEY=xai-your-key        # Grok
+GEMINI_API_KEY=your-key         # Gemini
 
-```bash
-python main.py predict [event_id]
+# Optional (for better research)
+TAVILY_API_KEY=tvly-your-key
 ```
 
-*Example (2028 Election Market):*
+### 3. Run
 ```bash
-python main.py predict 31552
+python main.py
 ```
 
 ---
 
-## 📦 Core Component Manifest
+## 💻 Usage
 
-*   **`PolymarketService`**: Interfaces with the Gamma API to resolve event rules and resolution dates.
-*   **`PredictionService`**: Orchestrator that manages the lifecycle of the "Battle."
-*   **`Isolated Agents`**: Subclasses of `BaseAgent` that execute archetypal-specific prompts.
-*   **`Persistence Layer`**: SQLite database for **Locked Predictions**—once an agent predicts, the data is immutable and stored for future auditing.
+### Interactive Mode (Recommended)
+```bash
+python main.py
+```
+Prompts for event ID and mode (text/voice).
+
+### Command Line
+```bash
+# Full battle with text debate
+python main.py run <event_id>
+
+# Full battle with voice debate
+python main.py run <event_id> --voice
+
+# Predictions only
+python main.py predict <event_id>
+
+# Debate existing predictions
+python main.py debate <event_id>
+
+# Discover events
+python main.py discover
+```
+
+### Event Input
+Accepts: Event ID, URL, or Slug
+```bash
+python main.py run 74949
+python main.py run https://polymarket.com/event/some-event
+python main.py run best-ai-model-2025
+```
+
+---
+
+## 🤖 AI Agents
+
+| Agent | API | Strategy |
+|:---|:---|:---|
+| **ChatGPT** | OpenAI | Precision-focused, official sources |
+| **Grok** | xAI | Early signals, social sentiment |
+| **Gemini** | Google | Constraints, historical precedents |
+
+---
+
+## 🏗️ Architecture
+
+```
+main.py                 ← Entry point
+├── src/agents/         ← AI agents (ChatGPT, Grok, Gemini)
+├── src/services/       ← Prediction, Debate, Voice services
+├── src/utils/          ← Console output, Voice (TTS)
+├── src/models.py       ← Data models (Pydantic)
+├── src/database.py     ← SQLite storage
+└── src/prompts.py      ← Agent prompts
+```
+
+---
+
+## 📊 Output
+
+### Predictions (V0)
+- YES/NO prediction with probability
+- Key claims with sources
+- Rationale for prediction
+- Stored in SQLite database
+
+### Text Debate (V1)
+- Natural back-and-forth conversation
+- Agents challenge each other's claims
+- Moderator guides discussion
+
+### Voice Debate (V2)
+- Unique voice per agent
+- Live audio playback
+- Same debate flow as V1
+
+---
+
+## 📦 Dependencies
+
+```
+python-dotenv
+requests
+pydantic
+google-generativeai
+openai
+tavily-python
+rich
+edge-tts
+pygame
+```
+
+---
+
+## ⚠️ Notes
+
+- **Rate Limits**: Free API tiers have limits. Use paid keys for production.
+- **Voice**: Requires audio output. Uses edge-tts (free).
+- **Research**: Add `TAVILY_API_KEY` for better web research.
 
 ---
 
 ## ⚖️ Legal Disclaimer
+
 - This tool is for **informational and research purposes only.**
 - It does not represent financial or betting advice.
-- No real-money wagering or automated betting functionality is included.
+- No real-money wagering functionality is included.

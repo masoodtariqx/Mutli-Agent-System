@@ -1,7 +1,9 @@
-pydantic
-openai
-google-generativeai
-requests
-sqlalchemy
 python-dotenv
+requests
+pydantic
+google-generativeai
+openai
 tavily-python
+rich
+edge-tts
+pygame
