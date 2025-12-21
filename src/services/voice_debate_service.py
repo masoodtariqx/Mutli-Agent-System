@@ -1,57 +1,54 @@
 """
-Voice Debate Service - Uses fresh predictions from current session
+Natural Voice Debate Engine - Free-flowing conversation with TTS
+Agents speak naturally like real experts
 """
 
 import os
 import time
 from typing import List, Dict
-import google.generativeai as genai
 from src.database import Database
 from src.utils.voice import speak
 from src.utils.console import (
-    console, print_header, print_section, print_predictions_table,
-    print_error
+    console, print_header, print_section, print_predictions_table, print_error
 )
+from src.utils.api_adapter import UnifiedLLM
+from rich.panel import Panel
 
 
 class VoiceDebateService:
-    """Voice debate using fresh predictions from current session."""
+    """Natural voice debate with free-flowing conversation."""
     
     def __init__(self, agents):
         self.db = Database()
         self.agents = [a for a in agents if a.has_valid_config()]
-        self._model = None
-        self._configure_llm()
+        self._llm = None
+        self._setup_llm()
     
-    def _configure_llm(self):
-        for key_name in ["GEMINI_API_KEY", "CHATGPT_GEMINI_KEY", "GROK_GEMINI_KEY"]:
+    def _setup_llm(self):
+        for key_name in ["GEMINI_API_KEY", "CHATGPT_GROQ_KEY", "GROK_GROQ_KEY", "OPENAI_API_KEY"]:
             key = os.getenv(key_name)
             if key and len(key) > 20:
-                try:
-                    genai.configure(api_key=key)
-                    self._model = genai.GenerativeModel("gemini-2.0-flash")
+                self._llm = UnifiedLLM(key, "Debate", console)
+                if self._llm.is_valid():
                     return
-                except:
-                    continue
+        self._llm = None
     
     def _generate_response(self, prompt: str) -> str:
-        """Generate LLM response with retry."""
-        if not self._model:
+        if not self._llm:
             return None
         
         max_attempts = 3
-        wait_time = 10
+        wait_time = 5
         
         for attempt in range(max_attempts):
             try:
-                response = self._model.generate_content(prompt)
-                result = response.text.strip()
+                result = self._llm.generate(prompt)
                 if result and len(result) > 20:
                     return result
             except Exception as e:
-                if "429" in str(e) or "quota" in str(e).lower():
+                if "429" in str(e) or "rate" in str(e).lower():
                     if attempt < max_attempts - 1:
-                        console.print(f"   [dim]⏳ Waiting for API ({wait_time}s)...[/dim]")
+                        console.print(f"   [dim]⏳ Waiting ({wait_time}s)...[/dim]")
                         time.sleep(wait_time)
                         wait_time += 5
                     continue
@@ -60,8 +57,15 @@ class VoiceDebateService:
                     continue
         return None
 
-    def run_voice_debate(self, event_id: str, predictions: List[Dict]) -> Dict:
-        """Run voice debate using fresh predictions from current session."""
+    def _speak_agent(self, agent_name: str, text: str, prediction: str):
+        """Print and speak agent's words."""
+        color = "green" if prediction == "YES" else "red" if prediction == "NO" else "yellow"
+        console.print(f"\n   💬 [bold {color}]{agent_name}[/bold {color}] [dim]({prediction})[/dim]")
+        console.print(f"      [white]{text}[/white]")
+        speak(text, agent_name)
+
+    def run_voice_debate(self, event_id: str, predictions: List[Dict], rounds: int = 2) -> Dict:
+        """Run natural voice debate."""
         
         if len(predictions) < 2:
             print_error("Need at least 2 predictions for debate.")
@@ -75,86 +79,66 @@ class VoiceDebateService:
             row = cursor.fetchone()
             event_title = row[0] if row else "Unknown Event"
         
-        print_header("🎙️ LIVE PANEL DEBATE", event_title)
+        print_header("🎙️ LIVE EXPERT PANEL", event_title)
         
-        console.print("\n[dim]Locked predictions:[/dim]")
-        for pred in predictions:
-            color = "green" if pred['prediction'] == "YES" else "red"
-            console.print(f"   [{color}]{pred['agent_name']}: {pred['prediction']} ({pred['probability']*100:.0f}%)[/{color}]")
-        console.print()
+        # Build context
+        predictions_context = "\n".join([
+            f"- {p['agent_name']} predicts {p['prediction']} ({p['probability']*100:.0f}%)"
+            for p in predictions
+        ])
         
-        # Moderator intro
-        intro = "Welcome to the panel discussion. All predictions are locked. Let's begin."
-        console.print(f"[magenta]🎙️ Moderator:[/magenta] {intro}\n")
+        # Show locked predictions
+        console.print(Panel(
+            "\n".join([
+                f"[{'green' if p['prediction']=='YES' else 'red'}]● {p['agent_name']}: {p['prediction']} ({p['probability']*100:.0f}%)[/]"
+                for p in predictions
+            ]),
+            title="🔒 [bold]LOCKED PREDICTIONS[/bold]",
+            border_style="cyan"
+        ))
+        
+        # Moderator opens
+        intro = "Welcome to our live expert panel. Each analyst has made their prediction. Let's discuss the reasoning."
+        console.print(f"\n[magenta]🎙️ Moderator:[/magenta] {intro}")
         speak(intro, "Moderator")
         
         transcript = []
+        conversation_history = []
         
-        # Debate
-        for target in predictions:
-            target_name = target['agent_name']
-            claims = target.get('key_facts', [])
+        # Natural conversation rounds
+        for round_num in range(1, rounds + 1):
+            print_section(f"Discussion Round {round_num}")
             
-            if not claims:
-                continue
-            
-            announce = f"Let's discuss {target_name}'s position."
-            console.print(f"[magenta]🎙️ Moderator:[/magenta] {announce}")
-            speak(announce, "Moderator")
-            
-            for claim in claims:
-                claim_text = claim.get('claim', '')
-                source = claim.get('source', 'unknown')
+            for i, current_agent in enumerate(predictions):
+                agent_name = current_agent['agent_name']
+                agent_prediction = current_agent['prediction']
                 
-                console.print(f"\n[yellow]📌 {target_name}'s Claim:[/yellow]")
-                console.print(f"   \"{claim_text}\"")
-                console.print(f"   [dim]Source: {source}[/dim]\n")
+                history_text = "\n".join(conversation_history[-4:]) if conversation_history else "Start of discussion."
                 
-                other_agents = [p for p in predictions if p['agent_name'] != target_name]
-                
-                if len(other_agents) >= 1:
-                    challenger1 = other_agents[0]['agent_name']
-                    challenge = self._generate_response(
-                        f"""You are {challenger1}. Challenge {target_name}'s claim:
-"{claim_text}"
+                if round_num == 1 and i == 0:
+                    prompt = f"""You are {agent_name}, predicted {agent_prediction}.
+Event: {event_title}
 
-Start with "{target_name}," and explain why you disagree. 2 sentences."""
-                    )
-                    
-                    if challenge:
-                        console.print(f"   💬 [bold]{challenger1}:[/bold] {challenge}")
-                        speak(challenge, challenger1)
-                        transcript.append({"speaker": challenger1, "text": challenge})
-                        
-                        defense = self._generate_response(
-                            f"""You are {target_name}. {challenger1} challenged you:
-"{challenge}"
+Open the discussion with your main argument. Be conversational. 2 sentences max."""
+                else:
+                    prompt = f"""You are {agent_name}, predicted {agent_prediction}.
+Event: {event_title}
 
-Respond to {challenger1}. Defend your position. Start with "{challenger1}," 2 sentences."""
-                        )
-                        
-                        if defense:
-                            console.print(f"   💬 [bold]{target_name}:[/bold] {defense}")
-                            speak(defense, target_name)
-                            transcript.append({"speaker": target_name, "text": defense})
+Recent discussion:
+{history_text}
+
+Respond naturally. Agree, disagree, or add perspective. Address others by name. 2 sentences max."""
                 
-                if len(other_agents) >= 2:
-                    challenger2 = other_agents[1]['agent_name']
-                    addition = self._generate_response(
-                        f"""You are {challenger2}. {target_name} and {challenger1} are debating.
-Add your perspective. 2 sentences."""
-                    )
-                    
-                    if addition:
-                        console.print(f"   💬 [bold]{challenger2}:[/bold] {addition}")
-                        speak(addition, challenger2)
-                        transcript.append({"speaker": challenger2, "text": addition})
+                response = self._generate_response(prompt)
                 
-                console.print()
+                if response:
+                    self._speak_agent(agent_name, response, agent_prediction)
+                    transcript.append({"speaker": agent_name, "text": response})
+                    conversation_history.append(f"{agent_name}: {response}")
         
         # Closing
-        closing = "This concludes our panel discussion. All predictions remain locked. Thank you."
-        console.print(f"[magenta]🎙️ Moderator:[/magenta] {closing}")
+        closing = "Thank you to our expert panel. All predictions remain locked."
+        console.print(f"\n[magenta]🎙️ Moderator:[/magenta] {closing}")
         speak(closing, "Moderator")
         
         print_predictions_table(predictions)

@@ -1,20 +1,21 @@
 """
-Specialized Agents - ChatGPT, Grok, and Gemini
-Supports NATIVE APIs: OpenAI, xAI, and Google Gemini.
-Falls back to Gemini if using GEMINI_ prefixed keys.
+Specialized Agents with Tool Calling Support
+LLM decides when to search - shows research activity in real-time
 """
 
 import os
 import json
-import google.generativeai as genai
-from openai import OpenAI
 from src.agents.base_agent import BaseAgent
 from src.models import PredictionOutput, EventMetadata
 from src.prompts import SYSTEM_PROMPT_PREFIX, CHATGPT_ARCHETYPE, GROK_ARCHETYPE, GEMINI_ARCHETYPE, PREDICTION_PROMPT
+from src.utils.api_adapter import UnifiedLLM
+from src.utils.console import console
 
 
 def clean_json(content: str) -> str:
     """Strip markdown/code fences from JSON."""
+    if not content:
+        return "{}"
     if "```json" in content:
         content = content.split("```json")[1].split("```")[0].strip()
     elif "```" in content:
@@ -22,198 +23,143 @@ def clean_json(content: str) -> str:
     return content
 
 
-def detect_best_gemini_model(api_key: str) -> str:
-    """Auto-detect best available Gemini model."""
-    if not api_key or len(api_key) < 20:
-        return "gemini-2.0-flash"
-    
-    try:
-        genai.configure(api_key=api_key)
-        available = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                name = m.name.replace("models/", "")
-                available.append(name)
-        
-        for preferred in ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-flash"]:
-            if preferred in available:
-                return preferred
-        
-        return available[0] if available else "gemini-2.0-flash"
-    except:
-        return "gemini-2.0-flash"
-
-
 class ChatGPTAgent(BaseAgent):
-    """ChatGPT - Precision-focused. Uses OpenAI API (or Gemini fallback)."""
+    """ChatGPT - Precision-focused with tool calling for live research."""
 
     def __init__(self):
-        # Check for real OpenAI key first
-        self._openai_key = os.getenv("OPENAI_API_KEY")
-        self._gemini_key = os.getenv("CHATGPT_GEMINI_KEY")
+        self._api_key = (
+            os.getenv("OPENAI_API_KEY") or 
+            os.getenv("CHATGPT_API_KEY") or 
+            os.getenv("CHATGPT_GROQ_KEY") or
+            os.getenv("CHATGPT_GEMINI_KEY")
+        )
         
-        # Determine which API to use
-        self._use_openai = bool(self._openai_key and self._openai_key.startswith("sk-"))
+        self._llm = UnifiedLLM(self._api_key, "ChatGPT", console) if self._api_key else None
         
-        if self._use_openai:
-            self._client = OpenAI(api_key=self._openai_key)
-            model_name = "gpt-4o"  # Best model
-            print(f"   ✓ ChatGPT using: OpenAI API ({model_name})")
-        else:
-            self._client = None
-            model_name = detect_best_gemini_model(self._gemini_key) if self._gemini_key else "gemini-2.0-flash"
-            if self._gemini_key and len(self._gemini_key) > 20:
-                print(f"   ✓ ChatGPT using: Gemini fallback ({model_name})")
-        
-        self._model = None
+        model_name = self._llm.model if self._llm and self._llm.is_valid() else "unknown"
         super().__init__("ChatGPT", model_name, "Precision-Oriented")
+        
+        if self.has_valid_config():
+            console.print(f"   ✓ ChatGPT: {self._llm.get_info()}")
 
     def has_valid_config(self) -> bool:
-        if self._use_openai:
-            return bool(self._openai_key) and len(self._openai_key) > 20
-        return bool(self._gemini_key) and len(self._gemini_key) > 20 and not self._gemini_key.startswith("your_")
-
-    @property
-    def model(self):
-        if not self._use_openai and not self._model:
-            genai.configure(api_key=self._gemini_key)
-            self._model = genai.GenerativeModel(self.model_name)
-        return self._model
+        return self._llm is not None and self._llm.is_valid()
 
     def generate_prediction(self, event: EventMetadata) -> PredictionOutput:
-        context = self.research(f"{event.title} official sources documentation")
-        system = f"{SYSTEM_PROMPT_PREFIX}\n{CHATGPT_ARCHETYPE}"
+        console.print(f"   [dim]📊 Analyzing event...[/dim]")
+        
+        system = f"""{SYSTEM_PROMPT_PREFIX}
+{CHATGPT_ARCHETYPE}
+
+You have access to a web_search tool. Use it to find current, factual information to support your analysis.
+Search for relevant data before making your prediction."""
+        
         user = PREDICTION_PROMPT.format(
             title=event.title,
             description=event.description,
             rules=event.resolution_rules,
             date=event.resolution_date,
-            context=context,
+            context="Use web_search tool to research current facts.",
             event_id=event.event_id
         )
         
-        if self._use_openai:
-            # Use OpenAI API
-            response = self._client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user + "\n\nRespond with valid JSON only."}
-                ],
-                response_format={"type": "json_object"}
-            )
-            data = json.loads(response.choices[0].message.content)
-        else:
-            # Use Gemini fallback
-            prompt = f"{system}\n\n{user}\n\nRespond with valid JSON only."
-            response = self.model.generate_content(prompt)
-            data = json.loads(clean_json(response.text.strip()))
+        response = self._llm.generate_json(user, system)
+        if not response:
+            raise Exception("API returned no response")
         
+        data = json.loads(clean_json(response))
         return PredictionOutput(**data)
 
 
 class GrokAgent(BaseAgent):
-    """Grok - Early-Signal focused. Uses xAI API (or Gemini fallback)."""
+    """Grok - Early-Signal focused with tool calling for live research."""
 
     def __init__(self):
-        # Check for real xAI key first
-        self._xai_key = os.getenv("XAI_API_KEY")
-        self._gemini_key = os.getenv("GROK_GEMINI_KEY")
+        self._api_key = (
+            os.getenv("XAI_API_KEY") or 
+            os.getenv("GROK_API_KEY") or 
+            os.getenv("GROK_GROQ_KEY") or
+            os.getenv("GROK_GEMINI_KEY")
+        )
         
-        # xAI uses OpenAI-compatible API
-        self._use_xai = bool(self._xai_key and self._xai_key.startswith("xai-"))
+        self._llm = UnifiedLLM(self._api_key, "Grok", console) if self._api_key else None
         
-        if self._use_xai:
-            self._client = OpenAI(api_key=self._xai_key, base_url="https://api.x.ai/v1")
-            model_name = "grok-2-latest"  # Best Grok model
-            print(f"   ✓ Grok using: xAI API ({model_name})")
-        else:
-            self._client = None
-            model_name = detect_best_gemini_model(self._gemini_key) if self._gemini_key else "gemini-2.0-flash"
-            if self._gemini_key and len(self._gemini_key) > 20:
-                print(f"   ✓ Grok using: Gemini fallback ({model_name})")
-        
-        self._model = None
+        model_name = self._llm.model if self._llm and self._llm.is_valid() else "unknown"
         super().__init__("Grok", model_name, "Early-Signal Oriented")
+        
+        if self.has_valid_config():
+            console.print(f"   ✓ Grok: {self._llm.get_info()}")
 
     def has_valid_config(self) -> bool:
-        if self._use_xai:
-            return bool(self._xai_key) and len(self._xai_key) > 20
-        return bool(self._gemini_key) and len(self._gemini_key) > 20 and not self._gemini_key.startswith("your_")
-
-    @property
-    def model(self):
-        if not self._use_xai and not self._model:
-            genai.configure(api_key=self._gemini_key)
-            self._model = genai.GenerativeModel(self.model_name)
-        return self._model
+        return self._llm is not None and self._llm.is_valid()
 
     def generate_prediction(self, event: EventMetadata) -> PredictionOutput:
-        context = self.research(f"{event.title} rumors leaks social sentiment trends")
-        system = f"{SYSTEM_PROMPT_PREFIX}\n{GROK_ARCHETYPE}"
+        console.print(f"   [dim]📊 Analyzing event...[/dim]")
+        
+        system = f"""{SYSTEM_PROMPT_PREFIX}
+{GROK_ARCHETYPE}
+
+You have access to a web_search tool. Use it to find early signals, rumors, social sentiment, and trending discussions.
+Search for unconventional sources before making your prediction."""
+        
         user = PREDICTION_PROMPT.format(
             title=event.title,
             description=event.description,
             rules=event.resolution_rules,
             date=event.resolution_date,
-            context=context,
+            context="Use web_search tool to find early signals and trends.",
             event_id=event.event_id
         )
         
-        if self._use_xai:
-            # Use xAI API (OpenAI-compatible)
-            response = self._client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user + "\n\nRespond with valid JSON only."}
-                ]
-            )
-            data = json.loads(clean_json(response.choices[0].message.content))
-        else:
-            # Use Gemini fallback
-            prompt = f"{system}\n\n{user}\n\nRespond with valid JSON only."
-            response = self.model.generate_content(prompt)
-            data = json.loads(clean_json(response.text.strip()))
+        response = self._llm.generate_json(user, system)
+        if not response:
+            raise Exception("API returned no response")
         
+        data = json.loads(clean_json(response))
         return PredictionOutput(**data)
 
 
 class GeminiAgent(BaseAgent):
-    """Gemini - Constraint-focused. Uses Google Gemini API."""
+    """Gemini - Constraint-focused with tool calling for live research."""
 
     def __init__(self):
-        self._api_key = os.getenv("GEMINI_API_KEY")
-        self._model = None
-        model_name = detect_best_gemini_model(self._api_key) if self._api_key else "gemini-2.0-flash"
+        self._api_key = (
+            os.getenv("GEMINI_API_KEY") or 
+            os.getenv("GEMINI_GROQ_KEY")
+        )
+        
+        self._llm = UnifiedLLM(self._api_key, "Gemini", console) if self._api_key else None
+        
+        model_name = self._llm.model if self._llm and self._llm.is_valid() else "unknown"
         super().__init__("Gemini", model_name, "Constraint-Oriented")
+        
         if self.has_valid_config():
-            print(f"   ✓ Gemini using: {model_name}")
+            console.print(f"   ✓ Gemini: {self._llm.get_info()}")
 
     def has_valid_config(self) -> bool:
-        key = self._api_key
-        return bool(key) and len(key) > 20 and not key.startswith("your_")
-
-    @property
-    def model(self):
-        if not self._model:
-            genai.configure(api_key=self._api_key)
-            self._model = genai.GenerativeModel(self.model_name)
-        return self._model
+        return self._llm is not None and self._llm.is_valid()
 
     def generate_prediction(self, event: EventMetadata) -> PredictionOutput:
-        context = self.research(f"{event.title} historical constraints feasibility")
-        system = f"{SYSTEM_PROMPT_PREFIX}\n{GEMINI_ARCHETYPE}"
+        console.print(f"   [dim]📊 Analyzing event...[/dim]")
+        
+        system = f"""{SYSTEM_PROMPT_PREFIX}
+{GEMINI_ARCHETYPE}
+
+You have access to a web_search tool. Use it to find historical data, constraints, and feasibility analysis.
+Search for analytical sources before making your prediction."""
+        
         user = PREDICTION_PROMPT.format(
             title=event.title,
             description=event.description,
             rules=event.resolution_rules,
             date=event.resolution_date,
-            context=context,
+            context="Use web_search tool to research constraints and feasibility.",
             event_id=event.event_id
         )
         
-        prompt = f"{system}\n\n{user}\n\nRespond with valid JSON only."
-        response = self.model.generate_content(prompt)
-        data = json.loads(clean_json(response.text.strip()))
+        response = self._llm.generate_json(user, system)
+        if not response:
+            raise Exception("API returned no response")
+        
+        data = json.loads(clean_json(response))
         return PredictionOutput(**data)
