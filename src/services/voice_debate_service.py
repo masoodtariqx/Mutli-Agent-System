@@ -1,6 +1,6 @@
 """
 Natural Voice Debate Engine - Free-flowing conversation with TTS
-Agents speak naturally like real experts
+Agents speak naturally like real experts - High Tension Mode
 """
 
 import os
@@ -79,7 +79,7 @@ class VoiceDebateService:
             row = cursor.fetchone()
             event_title = row[0] if row else "Unknown Event"
         
-        print_header("🎙️ LIVE EXPERT PANEL", event_title)
+        print_header("🎙️ LIVE EXPERT PANEL (HIGH TENSION)", event_title)
         
         # Build context
         predictions_context = "\n".join([
@@ -87,6 +87,11 @@ class VoiceDebateService:
             for p in predictions
         ])
         
+        # Check consensus
+        all_yes = all(p['prediction'] == "YES" for p in predictions)
+        all_no = all(p['prediction'] == "NO" for p in predictions)
+        consensus_mode = all_yes or all_no
+
         # Show locked predictions
         console.print(Panel(
             "\n".join([
@@ -98,7 +103,10 @@ class VoiceDebateService:
         ))
         
         # Moderator opens
-        intro = "Welcome to our live expert panel. Each analyst has made their prediction. Let's discuss the reasoning."
+        intro = "Welcome to the panel. I want a sharp debate today. Don't be polite."
+        if consensus_mode:
+            intro += " Since you all agree, I want deeper analysis. Find the risks. Why might you be wrong?"
+            
         console.print(f"\n[magenta]🎙️ Moderator:[/magenta] {intro}")
         speak(intro, "Moderator")
         
@@ -115,19 +123,32 @@ class VoiceDebateService:
                 
                 history_text = "\n".join(conversation_history[-4:]) if conversation_history else "Start of discussion."
                 
-                if round_num == 1 and i == 0:
-                    prompt = f"""You are {agent_name}, predicted {agent_prediction}.
-Event: {event_title}
+                # Dynamic Prompting
+                base_instruction = f"You are {agent_name}."
+                if agent_name == "ChatGPT":
+                    base_instruction += " You are a Rigorous Skeptic. Be arrogant about data."
+                elif agent_name == "Grok":
+                    base_instruction += " You are an Edgy Provocateur. Challenge the narrative."
+                elif agent_name == "Gemini":
+                    base_instruction += " You are a Pragmatic Realist. Focus on constraints."
 
-Open the discussion with your main argument. Be conversational. 2 sentences max."""
+                if consensus_mode and round_num > 1:
+                    instruction = "Everyone agrees. Play Devil's Advocate. Tell a short story about how we could be wrong."
                 else:
-                    prompt = f"""You are {agent_name}, predicted {agent_prediction}.
-Event: {event_title}
+                    instruction = "Respond naturally. Use an analogy or a 'human' example. Don't sound like a bot."
 
+                if round_num == 1 and i == 0:
+                    prompt = f"""{base_instruction}
+Event: {event_title}
+Open the discussion naturally. Explain your view as if talking to colleagues. Express a complete thought."""
+                else:
+                    prompt = f"""{base_instruction}
+Event: {event_title}
 Recent discussion:
 {history_text}
 
-Respond naturally. Agree, disagree, or add perspective. Address others by name. 2 sentences max."""
+{instruction}
+Respond naturally. You can speak for 3-4 sentences to explain your point."""
                 
                 response = self._generate_response(prompt)
                 
@@ -137,7 +158,7 @@ Respond naturally. Agree, disagree, or add perspective. Address others by name. 
                     conversation_history.append(f"{agent_name}: {response}")
         
         # Closing
-        closing = "Thank you to our expert panel. All predictions remain locked."
+        closing = "Debate concluded. The market is the ultimate judge."
         console.print(f"\n[magenta]🎙️ Moderator:[/magenta] {closing}")
         speak(closing, "Moderator")
         

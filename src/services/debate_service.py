@@ -86,6 +86,11 @@ class DebateService:
             f"- {p['agent_name']} predicts {p['prediction']} ({p['probability']*100:.0f}%): {p['rationale'][:100]}..."
             for p in predictions
         ])
+
+        # Check for consensus (all YES or all NO)
+        all_yes = all(p['prediction'] == "YES" for p in predictions)
+        all_no = all(p['prediction'] == "NO" for p in predictions)
+        consensus_mode = all_yes or all_no
         
         # Show locked predictions summary
         console.print(Panel(
@@ -98,7 +103,11 @@ class DebateService:
         ))
         
         # Moderator opens
-        print_moderator("Welcome to our expert panel. Each analyst has made their prediction. Let's have a natural discussion about your reasoning and where you disagree.", is_intro=True)
+        intro = "Welcome to the thunderdome. We have your predictions locked. I want a real debate, not polite agreement. Tear apart each other's logic."
+        if consensus_mode:
+            intro += " You all agree on the outcome, so I want you to play Devil's Advocate. Find the tail risk. Why could you ALL be wrong?"
+            
+        print_moderator(intro, is_intro=True)
         
         transcript = []
         conversation_history = []
@@ -110,56 +119,47 @@ class DebateService:
             for i, current_agent in enumerate(predictions):
                 agent_name = current_agent['agent_name']
                 agent_prediction = current_agent['prediction']
-                other_agents = [p for p in predictions if p['agent_name'] != agent_name]
                 
                 # Build conversation context
                 history_text = "\n".join(conversation_history[-6:]) if conversation_history else "This is the start of the discussion."
                 
+                # Dynamic Prompting based on flow
+                base_instruction = f"You are {agent_name}."
+                if agent_name == "ChatGPT":
+                    base_instruction += " You are the Rigorous Skeptic. Be arrogant, demand data, dismiss hype."
+                elif agent_name == "Grok":
+                    base_instruction += " You are the Edgy Provocateur. Be rebellious, mock conventional wisdom, bet on high variance."
+                elif agent_name == "Gemini":
+                    base_instruction += " You are the Pragmatic Realist. Focus on constraints, regulation, and why things fail."
+
+                if consensus_mode and round_num > 1:
+                    instruction = "Everyone seems to agree. Take a step back. Is there a scenario we are ignoring? Tell a story about how this could go wrong. Speak naturally."
+                else:
+                    instruction = "Respond naturally to the last speaker. Don't just counter—explain your thinking. Use an analogy if it helps. Speak like a human expert, not a bullet-point machine."
+
                 if round_num == 1 and i == 0:
                     # First speaker opens
-                    prompt = f"""You are {agent_name}, an AI analyst who predicted {agent_prediction}.
-
+                    prompt = f"""{base_instruction}
 Event: {event_title}
-
 Your prediction: {agent_prediction} ({current_agent['probability']*100:.0f}%)
 Your reasoning: {current_agent['rationale']}
 
-Other panelists' positions:
+Other panelists:
 {predictions_context}
 
-Open the discussion by explaining your key argument. Be conversational, confident, and direct. 2-3 sentences."""
-                
-                elif round_num == 1:
-                    # Others respond to opening
-                    prompt = f"""You are {agent_name}, an AI analyst who predicted {agent_prediction}.
-
-Event: {event_title}
-
-Your prediction: {agent_prediction} ({current_agent['probability']*100:.0f}%)
-
-Recent discussion:
-{history_text}
-
-Respond to what was just said. You can agree, disagree, or add a new perspective. Be natural and conversational like a real expert. Address others by name. 2-3 sentences."""
+Open the discussion. Lay out your argument clearly and naturally. Speak in a full paragraph."""
                 
                 else:
-                    # Free flowing discussion
-                    prompt = f"""You are {agent_name}, an AI analyst who predicted {agent_prediction}.
-
+                    # Reaction
+                    prompt = f"""{base_instruction}
 Event: {event_title}
+My Position: {agent_prediction}
 
-Your position: {agent_prediction}
-
-Conversation so far:
+Discussion so far:
 {history_text}
 
-Continue the natural discussion. You can:
-- Challenge someone's point
-- Defend your position
-- Acknowledge a good argument
-- Raise a new consideration
-
-Be conversational like a real expert panelist. Address others by name when responding to them. 2-3 sentences."""
+{instruction}
+Respond naturally. You can speak at length if needed to make your point."""
                 
                 response = self._generate_response(prompt)
                 
@@ -175,14 +175,14 @@ Be conversational like a real expert panelist. Address others by name when respo
             agent_name = agent['agent_name']
             agent_prediction = agent['prediction']
             
-            prompt = f"""You are {agent_name}. Give a brief closing statement (1-2 sentences) summarizing why you stand by your {agent_prediction} prediction after this discussion."""
+            prompt = f"""You are {agent_name}. Give a final 1-sentence 'mic drop' statement. Be extremely confident in your {agent_prediction} call."""
             
             response = self._generate_response(prompt)
             if response:
                 self._print_agent_speech(agent_name, response, agent_prediction)
                 transcript.append({"speaker": agent_name, "text": response})
         
-        print_moderator("Thank you to our expert panel. All predictions remain locked. The market will ultimately decide.", is_intro=False)
+        print_moderator("Debate concluded. The market will settle the score.", is_intro=False)
         
         # Final summary
         print_predictions_table(predictions)
