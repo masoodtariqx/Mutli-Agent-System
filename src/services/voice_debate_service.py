@@ -1,10 +1,6 @@
-"""
-Natural Voice Debate Engine - Free-flowing conversation with TTS
-Agents speak naturally like real experts
-"""
-
 import os
 import time
+import random
 from typing import List, Dict
 from src.database import Database
 from src.utils.voice import speak
@@ -14,9 +10,22 @@ from src.utils.console import (
 from src.utils.api_adapter import UnifiedLLM
 from rich.panel import Panel
 
+AGENT_PERSONAS = {
+    "ChatGPT": """You are ChatGPT. Analytical, calm but firm.
+STYLE: "I have to push back..." / "That's valid, but..."
+Keep it natural. 2-3 sentences max.""",
+    
+    "Grok": """You are Grok. Casual, confident, provocative.
+STYLE: "Nah, that's not it..." / "Look, I get it but..."
+Keep it punchy. 2-3 sentences max.""",
+    
+    "Gemini": """You are Gemini. Skeptical, detail-oriented realist.
+STYLE: "In practice that falls apart..." / "You're ignoring the logistics..."
+Keep it grounded. 2-3 sentences max."""
+}
+
 
 class VoiceDebateService:
-    """Natural voice debate with free-flowing conversation."""
     
     def __init__(self, agents):
         self.db = Database()
@@ -25,122 +34,120 @@ class VoiceDebateService:
         self._setup_llm()
     
     def _setup_llm(self):
-        for key_name in ["GEMINI_API_KEY", "CHATGPT_GROQ_KEY", "GROK_GROQ_KEY", "OPENAI_API_KEY"]:
+        for key_name in ["GEMINI_KEY", "CHATGPT_KEY", "GROK_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"]:
             key = os.getenv(key_name)
             if key and len(key) > 20:
-                self._llm = UnifiedLLM(key, "Debate", console)
+                self._llm = UnifiedLLM(key, "VoiceDebate", console)
                 if self._llm.is_valid():
                     return
         self._llm = None
     
-    def _generate_response(self, prompt: str) -> str:
+    def _generate(self, prompt, agent_name):
         if not self._llm:
             return None
         
-        max_attempts = 3
-        wait_time = 5
+        persona = AGENT_PERSONAS.get(agent_name, "")
+        system = persona + "\n\nYou are in a LIVE voice debate. YOU DECIDE whether to speak, PASS, or say I've made my point."
         
-        for attempt in range(max_attempts):
+        for attempt in range(3):
             try:
-                result = self._llm.generate(prompt)
-                if result and len(result) > 20:
+                result = self._llm.generate(prompt, system)
+                if result and len(result) > 2:
                     return result
             except Exception as e:
-                if "429" in str(e) or "rate" in str(e).lower():
-                    if attempt < max_attempts - 1:
-                        console.print(f"   [dim]⏳ Waiting ({wait_time}s)...[/dim]")
-                        time.sleep(wait_time)
-                        wait_time += 5
-                    continue
-                else:
-                    time.sleep(2)
-                    continue
+                if "429" in str(e):
+                    time.sleep(5)
+                time.sleep(2)
         return None
 
-    def _speak_agent(self, agent_name: str, text: str, prediction: str):
-        """Print and speak agent's words."""
-        color = "green" if prediction == "YES" else "red" if prediction == "NO" else "yellow"
-        console.print(f"\n   💬 [bold {color}]{agent_name}[/bold {color}] [dim]({prediction})[/dim]")
-        console.print(f"      [white]{text}[/white]")
-        speak(text, agent_name)
+    def _show_thinking(self, agent_name):
+        console.print(f"\n   [dim]{agent_name} considering...[/dim]", end="")
+        time.sleep(0.3)
+        console.print("\r" + " " * 40 + "\r", end="")
 
-    def run_voice_debate(self, event_id: str, predictions: List[Dict], rounds: int = 2) -> Dict:
-        """Run natural voice debate."""
-        
+    def _speak_agent(self, name, text, prediction):
+        color = "green" if prediction == "YES" else "red"
+        console.print(f"\n   [bold {color}]{name}[/bold {color}] [dim]({prediction})[/dim]")
+        console.print(f"      [white]{text}[/white]")
+        speak(text, name)
+        time.sleep(0.3)
+
+    def run_voice_debate(self, event_id, predictions, rounds=3):
         if len(predictions) < 2:
-            print_error("Need at least 2 predictions for debate.")
+            print_error("Need at least 2 predictions.")
             return {}
         
-        # Get event title
         import sqlite3
         with sqlite3.connect(self.db.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT title FROM events WHERE id = ?", (event_id,))
             row = cursor.fetchone()
-            event_title = row[0] if row else "Unknown Event"
+            event_title = row[0] if row else "Unknown"
         
-        print_header("🎙️ LIVE EXPERT PANEL", event_title)
+        print_header("LIVE VOICE DEBATE", event_title)
         
-        # Build context
-        predictions_context = "\n".join([
-            f"- {p['agent_name']} predicts {p['prediction']} ({p['probability']*100:.0f}%)"
-            for p in predictions
-        ])
-        
-        # Show locked predictions
         console.print(Panel(
             "\n".join([
-                f"[{'green' if p['prediction']=='YES' else 'red'}]● {p['agent_name']}: {p['prediction']} ({p['probability']*100:.0f}%)[/]"
+                f"[{'green' if p['prediction']=='YES' else 'red'}]{p['agent_name']}: {p['prediction']} ({p['probability']*100:.0f}%)[/]"
                 for p in predictions
             ]),
-            title="🔒 [bold]LOCKED PREDICTIONS[/bold]",
+            title="LOCKED PREDICTIONS",
             border_style="cyan"
         ))
         
-        # Moderator opens
-        intro = "Welcome to our live expert panel. Each analyst has made their prediction. Let's discuss the reasoning."
-        console.print(f"\n[magenta]🎙️ Moderator:[/magenta] {intro}")
+        intro = "Floor is open. Anyone can start."
+        console.print(f"\n[magenta]Moderator:[/magenta] {intro}")
         speak(intro, "Moderator")
         
         transcript = []
-        conversation_history = []
+        conversation = []
+        agents_done = set()
         
-        # Natural conversation rounds
-        for round_num in range(1, rounds + 1):
-            print_section(f"Discussion Round {round_num}")
+        shuffled = predictions.copy()
+        random.shuffle(shuffled)
+        
+        for p in shuffled:
+            self._show_thinking(p['agent_name'])
+            prompt = "Event: " + event_title + "\nYour prediction: " + p['prediction'] + "\nDo you want to start? Or PASS."
+            response = self._generate(prompt, p['agent_name'])
+            if response and response.strip().upper() != "PASS":
+                self._speak_agent(p['agent_name'], response, p['prediction'])
+                transcript.append({"speaker": p['agent_name'], "text": response})
+                conversation.append(p['agent_name'] + ": " + response)
+                if "made my point" in response.lower():
+                    agents_done.add(p['agent_name'])
+                break
+        
+        while len(agents_done) < len(predictions):
+            available = [p for p in predictions if p['agent_name'] not in agents_done]
+            if not available:
+                break
             
-            for i, current_agent in enumerate(predictions):
-                agent_name = current_agent['agent_name']
-                agent_prediction = current_agent['prediction']
+            random.shuffle(available)
+            
+            for current in available:
+                self._show_thinking(current['agent_name'])
+                recent = "\n".join(conversation[-6:]) if conversation else "Nothing yet."
                 
-                history_text = "\n".join(conversation_history[-4:]) if conversation_history else "Start of discussion."
-                
-                if round_num == 1 and i == 0:
-                    prompt = f"""You are {agent_name}, predicted {agent_prediction}.
-Event: {event_title}
+                prompt = "Event: " + event_title + "\nYour prediction: " + current['prediction'] + "\n\nCONVERSATION:\n" + recent + "\n\nDo you want to respond, PASS, or say I've made my point?"
 
-Open the discussion with your main argument. Be conversational. 2 sentences max."""
-                else:
-                    prompt = f"""You are {agent_name}, predicted {agent_prediction}.
-Event: {event_title}
-
-Recent discussion:
-{history_text}
-
-Respond naturally. Agree, disagree, or add perspective. Address others by name. 2 sentences max."""
-                
-                response = self._generate_response(prompt)
+                response = self._generate(prompt, current['agent_name'])
                 
                 if response:
-                    self._speak_agent(agent_name, response, agent_prediction)
-                    transcript.append({"speaker": agent_name, "text": response})
-                    conversation_history.append(f"{agent_name}: {response}")
+                    clean = response.strip()
+                    if clean.upper() == "PASS":
+                        console.print(f"   [dim]{current['agent_name']} passes.[/dim]")
+                    elif "made my point" in clean.lower():
+                        self._speak_agent(current['agent_name'], clean, current['prediction'])
+                        conversation.append(current['agent_name'] + ": " + clean)
+                        agents_done.add(current['agent_name'])
+                    else:
+                        self._speak_agent(current['agent_name'], clean, current['prediction'])
+                        conversation.append(current['agent_name'] + ": " + clean)
         
-        # Closing
-        closing = "Thank you to our expert panel. All predictions remain locked."
-        console.print(f"\n[magenta]🎙️ Moderator:[/magenta] {closing}")
+        closing = "All agents concluded."
+        console.print(f"\n[magenta]Moderator:[/magenta] {closing}")
         speak(closing, "Moderator")
-        
         print_predictions_table(predictions)
         
         return {"event_id": event_id, "predictions": predictions, "transcript": transcript}

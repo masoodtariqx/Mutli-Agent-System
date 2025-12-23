@@ -1,8 +1,3 @@
-"""
-Specialized Agents with Tool Calling Support
-LLM decides when to search - shows research activity in real-time
-"""
-
 import os
 import json
 from src.agents.base_agent import BaseAgent
@@ -13,7 +8,6 @@ from src.utils.console import console
 
 
 def clean_json(content: str) -> str:
-    """Strip markdown/code fences from JSON."""
     if not content:
         return "{}"
     if "```json" in content:
@@ -24,14 +18,12 @@ def clean_json(content: str) -> str:
 
 
 class ChatGPTAgent(BaseAgent):
-    """ChatGPT - Precision-focused with tool calling for live research."""
 
     def __init__(self):
         self._api_key = (
+            os.getenv("CHATGPT_KEY") or
             os.getenv("OPENAI_API_KEY") or 
-            os.getenv("CHATGPT_API_KEY") or 
-            os.getenv("CHATGPT_GROQ_KEY") or
-            os.getenv("CHATGPT_GEMINI_KEY")
+            os.getenv("CHATGPT_API_KEY")
         )
         
         self._llm = UnifiedLLM(self._api_key, "ChatGPT", console) if self._api_key else None
@@ -46,20 +38,19 @@ class ChatGPTAgent(BaseAgent):
         return self._llm is not None and self._llm.is_valid()
 
     def generate_prediction(self, event: EventMetadata) -> PredictionOutput:
-        console.print(f"   [dim]📊 Analyzing event...[/dim]")
+        console.print(f"   [dim]Analyzing event...[/dim]")
         
         system = f"""{SYSTEM_PROMPT_PREFIX}
 {CHATGPT_ARCHETYPE}
 
-You have access to a web_search tool. Use it to find current, factual information to support your analysis.
-Search for relevant data before making your prediction."""
+Analyze this prediction market event using your knowledge. Be precise and data-driven."""
         
         user = PREDICTION_PROMPT.format(
             title=event.title,
             description=event.description,
             rules=event.resolution_rules,
             date=event.resolution_date,
-            context="Use web_search tool to research current facts.",
+            context="",
             event_id=event.event_id
         )
         
@@ -72,14 +63,12 @@ Search for relevant data before making your prediction."""
 
 
 class GrokAgent(BaseAgent):
-    """Grok - Early-Signal focused with tool calling for live research."""
 
     def __init__(self):
         self._api_key = (
+            os.getenv("GROK_KEY") or
             os.getenv("XAI_API_KEY") or 
-            os.getenv("GROK_API_KEY") or 
-            os.getenv("GROK_GROQ_KEY") or
-            os.getenv("GROK_GEMINI_KEY")
+            os.getenv("GROK_API_KEY")
         )
         
         self._llm = UnifiedLLM(self._api_key, "Grok", console) if self._api_key else None
@@ -94,20 +83,19 @@ class GrokAgent(BaseAgent):
         return self._llm is not None and self._llm.is_valid()
 
     def generate_prediction(self, event: EventMetadata) -> PredictionOutput:
-        console.print(f"   [dim]📊 Analyzing event...[/dim]")
+        console.print(f"   [dim]Analyzing event...[/dim]")
         
         system = f"""{SYSTEM_PROMPT_PREFIX}
 {GROK_ARCHETYPE}
 
-You have access to a web_search tool. Use it to find early signals, rumors, social sentiment, and trending discussions.
-Search for unconventional sources before making your prediction."""
+Analyze this prediction market event. Look for early signals and unconventional insights."""
         
         user = PREDICTION_PROMPT.format(
             title=event.title,
             description=event.description,
             rules=event.resolution_rules,
             date=event.resolution_date,
-            context="Use web_search tool to find early signals and trends.",
+            context="",
             event_id=event.event_id
         )
         
@@ -120,12 +108,11 @@ Search for unconventional sources before making your prediction."""
 
 
 class GeminiAgent(BaseAgent):
-    """Gemini - Constraint-focused with tool calling for live research."""
 
     def __init__(self):
         self._api_key = (
-            os.getenv("GEMINI_API_KEY") or 
-            os.getenv("GEMINI_GROQ_KEY")
+            os.getenv("GEMINI_KEY") or
+            os.getenv("GEMINI_API_KEY")
         )
         
         self._llm = UnifiedLLM(self._api_key, "Gemini", console) if self._api_key else None
@@ -140,20 +127,19 @@ class GeminiAgent(BaseAgent):
         return self._llm is not None and self._llm.is_valid()
 
     def generate_prediction(self, event: EventMetadata) -> PredictionOutput:
-        console.print(f"   [dim]📊 Analyzing event...[/dim]")
+        console.print(f"   [dim]Analyzing event...[/dim]")
         
         system = f"""{SYSTEM_PROMPT_PREFIX}
 {GEMINI_ARCHETYPE}
 
-You have access to a web_search tool. Use it to find historical data, constraints, and feasibility analysis.
-Search for analytical sources before making your prediction."""
+Analyze this prediction market event. Focus on constraints, feasibility, and historical patterns."""
         
         user = PREDICTION_PROMPT.format(
             title=event.title,
             description=event.description,
             rules=event.resolution_rules,
             date=event.resolution_date,
-            context="Use web_search tool to research constraints and feasibility.",
+            context="",
             event_id=event.event_id
         )
         
