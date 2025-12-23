@@ -1,129 +1,97 @@
 # 🎯 Multi-Agent Prediction Battle System
 
-AI agents collaborate and debate to make predictions on real-world events.
+AI agents make predictions on real-world events and debate autonomously.
 
-## ✨ Key Features
+## ✨ Features
 
 | Feature | Description |
 |:---|:---|
-| **🛠️ Tool Calling** | LLM decides when to search using function calling |
-| **💬 Natural Debate** | Free-flowing conversation like real experts |
-| **🎙️ Voice Output** | Agents speak with unique voices |
-| **🔌 Multi-API** | Supports Groq, OpenAI, xAI, Gemini |
+| **� Native Search** | OpenAI web_search + Gemini Search Grounding |
+| **💬 Autonomous Debate** | Agents decide to speak, pass, or conclude |
+| **🎙️ ElevenLabs Voice** | Distinct voices for each agent |
+| **🔌 Multi-API** | Supports OpenAI, xAI (Grok), Gemini, Groq |
 | **📊 Beautiful UI** | Rich terminal formatting |
 
 ## 🚀 Quick Start
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Configure API keys
-cp .env.example .env
-# Edit .env with your keys
-
-# Run interactive mode
 python main.py
 ```
 
 ## 📋 API Configuration
 
-The system **auto-detects** API type from key prefix:
+Auto-detects API type from key prefix:
 
-| Key Prefix | Provider | Model |
-|:---|:---|:---|
-| `gsk_` | Groq (FREE) | llama-3.3-70b |
-| `sk-` | OpenAI | gpt-4o |
-| `xai-` | xAI | grok-2-latest |
-| `AIza` | Gemini | gemini-2.0-flash |
+| Key Prefix | Provider | Model | Native Search |
+|:---|:---|:---|:---|
+| `sk-` | OpenAI | gpt-4o | ✅ web_search |
+| `AIza` | Gemini | gemini-2.0-flash | ✅ Search Grounding |
+| `xai-` | xAI (Grok) | grok-2-latest | ❌ |
+| `gsk_` | Groq | llama-3.3-70b | ❌ |
 
-### .env Example
+### .env
 
 ```env
-# Agents (use any compatible API)
-CHATGPT_GROQ_KEY=gsk_your_key
-GROK_GROQ_KEY=gsk_your_key  
-GEMINI_GROQ_KEY=gsk_your_key
+CHATGPT_KEY=sk-your_openai_key
+GROK_KEY=xai-your_grok_key
+GEMINI_KEY=AIza_your_gemini_key
 
-# Research (enables tool calling)
-TAVILY_API_KEY=tvly_your_key
+# Optional: ElevenLabs for voice
+ELEVENLABS_API_KEY=your_key
 ```
 
 ## 🎮 Usage
 
-### Interactive Mode
 ```bash
 python main.py
 ```
 
-### Commands
-```bash
-# Full battle (prediction + debate)
-python main.py run <event_id>
+Enter a Polymarket event (ID, URL, or slug), then choose:
+- **Mode 1**: Text Debate
+- **Mode 2**: Voice Debate (ElevenLabs)
 
-# With voice (agents speak)
-python main.py run <event_id> --voice
-
-# Prediction only
-python main.py predict <event_id>
-
-# Discover events
-python main.py discover
-```
-
-## 🏗️ Architecture
+## 🏗️ System Flow
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   User Input                        │
-│               (Event ID/URL/Slug)                   │
-└─────────────────────┬───────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────┐
-│              Polymarket API                         │
-│           Fetch Event Details                       │
-└─────────────────────┬───────────────────────────────┘
-                      │
-    ┌─────────────────┼─────────────────┐
-    │                 │                 │
-┌───▼────┐      ┌─────▼─────┐     ┌─────▼─────┐
-│ChatGPT │      │   Grok    │     │  Gemini   │
-│ Agent  │      │   Agent   │     │  Agent    │
-└───┬────┘      └─────┬─────┘     └─────┬─────┘
-    │                 │                 │
-    │    🛠️ Tool Calling: web_search    │
-    │    🔍 LLM decides when to search  │
-    │                 │                 │
-┌───▼────┐      ┌─────▼─────┐     ┌─────▼─────┐
-│ YES/NO │      │  YES/NO   │     │  YES/NO   │
-│   %    │      │    %      │     │    %      │
-└───┬────┘      └─────┬─────┘     └─────┬─────┘
-    │                 │                 │
-    └─────────────────┼─────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────┐
-│              Natural Debate                         │
-│       Free-flowing expert discussion                │
-└─────────────────────┬───────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────┐
-│             Final Summary                           │
-│          Locked Predictions                         │
-└─────────────────────────────────────────────────────┘
+User Input → Polymarket API → Event Details
+                    ↓
+    ┌───────────────┼───────────────┐
+    ↓               ↓               ↓
+ ChatGPT          Grok           Gemini
+ (OpenAI)        (xAI)          (Google)
+    ↓               ↓               ↓
+ Native          Model          Search
+ Search         Knowledge      Grounding
+    ↓               ↓               ↓
+ YES/NO%        YES/NO%        YES/NO%
+    └───────────────┼───────────────┘
+                    ↓
+          Autonomous Debate
+    (Agents decide to speak/pass/end)
+                    ↓
+           Final Predictions
 ```
+
+## 🔊 Voice (ElevenLabs)
+
+Each agent has a distinct voice:
+- **ChatGPT**: Daniel (calm, professional)
+- **Grok**: Liam (energetic, casual)
+- **Gemini**: Sarah (analytical)
+- **Moderator**: Rachel (neutral)
 
 ## 📦 Dependencies
 
 ```
+openai
+google-genai
+elevenlabs
+rich
+pygame
 python-dotenv
 requests
 pydantic
-google-generativeai
-tavily-python
-rich
-edge-tts
-pygame
-openai
 ```
 
 ## 📄 License
