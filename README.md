@@ -6,7 +6,7 @@ AI agents make predictions on real-world events and debate autonomously.
 
 | Feature | Description |
 |:---|:---|
-| **� Native Search** | OpenAI web_search + Gemini Search Grounding |
+| **🔧 Native Function Calling** | OpenAI, Gemini, Grok with tool definitions |
 | **💬 Autonomous Debate** | Agents decide to speak, pass, or conclude |
 | **🎙️ ElevenLabs Voice** | Distinct voices for each agent |
 | **🔌 Multi-API** | Supports OpenAI, xAI (Grok), Gemini, Groq |
@@ -23,11 +23,11 @@ python main.py
 
 Auto-detects API type from key prefix:
 
-| Key Prefix | Provider | Model | Native Search |
+| Key Prefix | Provider | Model | Function Calling |
 |:---|:---|:---|:---|
-| `sk-` | OpenAI | gpt-4o | ✅ web_search |
-| `AIza` | Gemini | gemini-2.0-flash | ✅ Search Grounding |
-| `xai-` | xAI (Grok) | grok-2-latest | ❌ |
+| `sk-` | OpenAI | gpt-4o | ✅ tools + tool_choice |
+| `AIza` | Gemini | gemini-2.0-flash | ✅ FunctionDeclaration |
+| `xai-` | xAI (Grok) | grok-2-latest | ✅ tools + tool_choice |
 | `gsk_` | Groq | llama-3.3-70b | ❌ |
 
 ### .env
@@ -51,27 +51,24 @@ Enter a Polymarket event (ID, URL, or slug), then choose:
 - **Mode 1**: Text Debate
 - **Mode 2**: Voice Debate (ElevenLabs)
 
-## 🏗️ System Flow
+## 🏗️ Architecture
+
+### Native Function Calling Flow
 
 ```
-User Input → Polymarket API → Event Details
-                    ↓
-    ┌───────────────┼───────────────┐
-    ↓               ↓               ↓
- ChatGPT          Grok           Gemini
- (OpenAI)        (xAI)          (Google)
-    ↓               ↓               ↓
- Native          Model          Search
- Search         Knowledge      Grounding
-    ↓               ↓               ↓
- YES/NO%        YES/NO%        YES/NO%
-    └───────────────┼───────────────┘
-                    ↓
-          Autonomous Debate
-    (Agents decide to speak/pass/end)
-                    ↓
-           Final Predictions
+1. Send prompt + tool definitions to model
+2. Model returns tool_call (function name + args)
+3. Execute tool via callback
+4. Send result back to model
+5. Model generates final response
 ```
+
+### Supported APIs
+
+- **OpenAI**: `chat.completions.create()` with `tools` param
+- **Gemini**: `FunctionDeclaration` + `function_call` response
+- **xAI/Grok**: OpenAI-compatible `tools` param
+- **JSON**: Native `response_format` / `response_mime_type`
 
 ## 🔊 Voice (ElevenLabs)
 
